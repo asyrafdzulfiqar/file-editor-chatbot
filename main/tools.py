@@ -1,6 +1,8 @@
 import json
 from typing import Optional
 import os
+from pathlib import Path
+from read_files import ReadFiles
 
 def create_file(content: str, file_path: str | None) -> str:
     """
@@ -16,26 +18,35 @@ def create_file(content: str, file_path: str | None) -> str:
     """
 
     len_content = len(content)
-
+    
     try:
         if not file_path:
             file_path = "test.txt"
             
-            with open(file_path, "w") as test_file:
-                len_content_file_write = test_file.write(content)
-
         elif file_path and not os.path.splitext(file_path)[-1]:
             file_path = file_path + ".txt"
-            
-            with open(file_path, "w") as file:
-                len_content_file_write = file.write(content)
-                
-        else:
-            with open(file_path, "w") as test_file:
-                len_content_file_write = test_file.write(content)
         
+        parent = Path().cwd().parent
+        p = Path(file_path)
+        
+        match p.suffix:
+            case ".txt" | ".py" | ".json" | ".R":
+                folder = "scripts"
+                
+            case ".ipynb":
+                folder = "notebooks"
+        
+        target_path = parent / folder / p.name
+        
+        with target_path.open("w") as file:
+            len_content_file_write = file.write(content)
+            
         if len_content_file_write == len_content:
-            return f"File created and saved successfully into `{file_path}`!"
+            target_path = str(target_path)
+            parent = str(parent)
+            target_path = target_path.replace(parent, "..")
+                
+            return f"File created and saved successfully into `{target_path}`!"
 
     except Exception as e:
         return f"Error occurred: {e}"
@@ -45,29 +56,34 @@ def read_file(file_path: str) -> str:
     """
     Reads content of file in a specified file path, returns a dictionary of line numbers with their codes, MUST provide file path. 
     Call this function when user asks to read file contents at specified file path.\n
-    NEVER guess where the file might be located, return to user with FileNotFoundError message and ask for its correct path\n
+    NEVER guess where the file might be located, return to user with `FileNotFoundError` message and ask for its correct path\n
 
     Args:
         file_path: file path to read file contents from
     """
-
-    try:
-        file_io_wrapper = open(file_path, "r")
-        count = 0
-        content = {}
-
-        while True:
-            item = file_io_wrapper.readline()
-            if item == "":
-                file_io_wrapper.close()
-
-                return json.dumps(content)
+    parent = Path().cwd().parent
+    p = Path(file_path)
+    extension = p.suffix
+    
+    if not extension:
+        return f'Error: file "{file_path}" has no extension.'
+    
+    match extension:
+        case ".txt" | ".py" | ".json" | ".R":
+            folder = "scripts"
+        
+        case ".ipynb":
+            folder = "notebooks"
+    
+    path = parent / folder / p
+    
+    if path.exists():
+        match folder:
+            case "notebooks":
+                return ReadFiles(file_path=path).read_ipynb()
             
-            content[count] = item
-            count += 1
-
-    except FileNotFoundError:
-        return f"Error: file in file path {file_path} not found"
+    else:
+        return f'Error: file in path "{file_path}" not found.'
 
 
 def update_file(changes: str, read_file_path: str, save_file_path: Optional[str]) -> str:
