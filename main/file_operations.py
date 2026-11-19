@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import json
+import pprint
 
 class ReadFiles:
     
@@ -53,6 +54,7 @@ class ReadFiles:
         ipynb_content = {}
 
         cells = content["cells"]
+        
         for cell_num in range(len(cells)):
             ipynb_content[cell_num] = {
                 "cell_type": cells[cell_num]["cell_type"],
@@ -69,32 +71,32 @@ class ReadFiles:
                     output_type = cells[cell_num]["outputs"][0]["output_type"]
                     ipynb_content[cell_num]["outputs"]["output_type"] = output_type
                 
-                match output_type:
-                    case "execute_result":
-                        data_text_plain = cells[cell_num]["outputs"][0]["data"]["text/plain"]
-                        data_text_html = cells[cell_num]["outputs"][0]["data"]["text/html"]
-                        ipynb_content[cell_num]["outputs"]["text/plain"] = {}
-                        ipynb_content[cell_num]["outputs"]["text/html"] = {}
-                        
-                        for line_output in range(len(data_text_plain)):
-                            ipynb_content[cell_num]["outputs"]["text/plain"][line_output] = data_text_plain[line_output]
+                    match output_type:
+                        case "execute_result":
+                            data_text_plain = cells[cell_num]["outputs"][0]["data"]["text/plain"]
+                            data_text_html = cells[cell_num]["outputs"][0]["data"]["text/html"]
+                            ipynb_content[cell_num]["outputs"]["text/plain"] = {}
+                            ipynb_content[cell_num]["outputs"]["text/html"] = {}
                             
-                        for line_output in range(len(data_text_html)):
-                                ipynb_content[cell_num]["outputs"]["text/html"][line_output] = data_text_html[line_output]
+                            for line_output in range(len(data_text_plain)):
+                                ipynb_content[cell_num]["outputs"]["text/plain"][line_output] = data_text_plain[line_output]
+                                
+                            for line_output in range(len(data_text_html)):
+                                    ipynb_content[cell_num]["outputs"]["text/html"][line_output] = data_text_html[line_output]
+                                
+                        case "stream":
+                            data = cells[cell_num]["outputs"][0]["text"]
+                            ipynb_content[cell_num]["outputs"]["text"] = {}
                             
-                    case "stream":
-                        data = cells[cell_num]["outputs"][0]["text"]
-                        ipynb_content[cell_num]["outputs"]["text"] = {}
-                        
-                        for line_output in range(len(data)):
-                            ipynb_content[cell_num]["outputs"]["text"][line_output] = data[line_output]
+                            for line_output in range(len(data)):
+                                ipynb_content[cell_num]["outputs"]["text"][line_output] = data[line_output]
+                                
+                        case "error":
+                            data = cells[cell_num]["outputs"][0]
+                            ipynb_content[cell_num]["outputs"]["error"] = {}
                             
-                    case "error":
-                        data = cells[cell_num]["outputs"][0]
-                        ipynb_content[cell_num]["outputs"]["error"] = {}
-                        
-                        ipynb_content[cell_num]["outputs"]["error"]["error_name"] = data["ename"]
-                        ipynb_content[cell_num]["outputs"]["error"]["error_value"] = data["evalue"]
+                            ipynb_content[cell_num]["outputs"]["error"]["error_name"] = data["ename"]
+                            ipynb_content[cell_num]["outputs"]["error"]["error_value"] = data["evalue"]
         
         self.content["content"] = ipynb_content
         
@@ -156,14 +158,12 @@ class UpdateFiles:
         for cell_num in new_content:
             target_cell = int(cell_num) + cell_inserted
             operation = new_content[cell_num]["operation"]
-            cell_content = new_content[cell_num]["content"]
+            
+            if "content" in new_content[cell_num]:
+                cell_content = new_content[cell_num]["content"]
             
             if operation == "insert_cell":
-                if cell_inserted == 0:
-                    original_content["cells"].insert(target_cell, cell_content)
-                else:
-                    original_content["cells"].insert(target_cell + cell_inserted, cell_content)
-            
+                original_content["cells"].insert(target_cell, cell_content)
                 cell_inserted += 1
     
             elif operation == "edit_cell":
@@ -185,7 +185,11 @@ class UpdateFiles:
                 # change metadata (if present)
                 if "metadata" in cell_content:
                     original_content["cells"][target_cell]["metadata"] = cell_content["metadata"]
-        
+
+            elif operation == "delete_cell":
+                original_content["cells"].pop(target_cell)
+                cell_inserted -= 1
+            
         updated_content = json.dumps(original_content)
         len_updated_content = len(updated_content)
         
@@ -200,5 +204,3 @@ class UpdateFiles:
     def update_word(self):
         pass
     
-    
-    # read "two_variable_histograms.ipynb"
