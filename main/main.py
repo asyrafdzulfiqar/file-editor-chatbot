@@ -9,7 +9,7 @@ client = OpenAI()
 messages = [
     {
         "role": "system",
-        "content": "You are a very helpful agent who is very detailed in its execution. That means you need to discuss every reasoning made to the user if you do reason."
+        "content": "You are an efficient agent that calls functions only once. ALWAYS consult the function documentation first for clearer context and instructions."
     }
 ]
 
@@ -54,15 +54,9 @@ def chat(prompt):
                             
                         elif item.name == "update_file":
                             changes = arguments["changes"]
-                            read_file_path = arguments["real_file_path"]
-                            
-                            if "save_file_path" in arguments:
-                                save_file_path = arguments["save_file_path"]
+                            file_path = arguments["file_path"]
                                 
-                            else:
-                                save_file_path = None
-                                
-                            status = update_file(changes=changes, read_file_path=read_file_path, save_file_path=save_file_path)
+                            status = update_file(changes=changes, file_path=file_path)
                         
                         messages.append(
                             {
