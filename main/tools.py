@@ -2,7 +2,8 @@ import json
 from typing import Optional
 import os
 from pathlib import Path
-from read_files import ReadFiles
+from file_operations import ReadFiles, UpdateFiles
+
 
 def create_file(content: str, file_path: str | None) -> str:
     """
@@ -42,17 +43,13 @@ def create_file(content: str, file_path: str | None) -> str:
             len_content_file_write = file.write(content)
             
         if len_content_file_write == len_content:
-            target_path = str(target_path)
-            parent = str(parent)
-            target_path = target_path.replace(parent, "..")
-                
-            return f"File created and saved successfully into `{target_path}`!"
+            return f"File created and saved successfully into `{file_path}`!"
 
     except Exception as e:
         return f"Error occurred: {e}"
 
 
-def read_file(file_path: str) -> str:
+def read_file(file_path: str, for_update: bool = False) -> str:
     """
     Reads content of file in a specified file path, returns a dictionary of line numbers with their codes, MUST provide file path. 
     Call this function when user asks to read file contents at specified file path.\n
@@ -61,6 +58,7 @@ def read_file(file_path: str) -> str:
     Args:
         file_path: file path to read file contents from
     """
+    
     parent = Path().cwd().parent
     p = Path(file_path)
     extension = p.suffix
@@ -76,51 +74,92 @@ def read_file(file_path: str) -> str:
             folder = "notebooks"
     
     path = parent / folder / p
+    readFiles = ReadFiles(file_path=path)
     
     if path.exists():
         match folder:
             case "notebooks":
-                return ReadFiles(file_path=path).read_ipynb()
+                return readFiles.read_ipynb(for_update=for_update)
             
     else:
         return f'Error: file in path "{file_path}" not found.'
 
 
-def update_file(changes: str, read_file_path: str, save_file_path: Optional[str]) -> str:
+def update_file(changes: str, file_path: str) -> str:
     """
-    Edits file contents based on line numbers\n
-    Example format: {1: "code here", 3: "code there", 18: "code everywhere}\n
-    Call this function when user asks to edit a file
-
+    Edits file contents\n
+    Call this function when user asks to edit a file\n
+    
     Args:
-        changes: a key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in dictionary format
-        read_file_path: file path to read file contents from
-        save_file_path: optional file path to save changes to, defaulted to overwriting changes on the same file path as read_file_path
+        changes: a key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in JSON format (refer to documentation below)
+        file_path: file path to read file contents from
+    
+    ---
+    
+    If the file path is an `.ipynb` notebook, `changes` parameter should be in following JSON format:
+    ```
+    {
+        cell_number: {
+            "operation": "insert_cell",
+            "content": {
+                "cell_type": "[ markdown | code ]",
+                "source": []    # line-by-line code, following IPYNB format
+                "metadata": {}  # provide this attribute where necessary
+            }
+        },
+        cell_number: {
+            "operation": "edit_cell",
+            "content": {
+                "cell_type": "[ markdown | code ]",
+                "source": {
+                    line_num: "code = \"here\"",
+                    line_num: "\\n",
+                    line_num: "var = 123",
+                    line_num: "print(var)"
+                },
+                "metadata": {}  # provide this attribute where necessary
+            }
+        },
+        cell_number: {
+            "operation": "delete_cell",
+        }
+    }
+    ```
     """
     
     # To-do for this funciton:
     # 1. save changes to a log file. must include contents from before changes
     
-    with open(read_file_path, "r") as file:
-        content = file.readlines()
-
-    content_changes = json.loads(changes)
-
-    for line, code in content_changes:
-        content.pop(line)
-        content.insert(line, code)
-
-    edited_content = "".join(content)
-
-    if save_file_path:
-        with open(save_file_path, "w") as file:
-            file.write(edited_content)
-
-    else:
-        with open(read_file_path, "w") as file:
-            file.write(edited_content)
-
-    return "Changes made and saved!"
+    original_content = read_file(file_path=file_path, for_update=True)
+    updateFile = UpdateFiles()
+    
+    # To save
+    parent = Path().cwd().parent
+    p = Path(file_path)
+    extension = p.suffix
+    
+    if not extension:
+        return f'Error: file "{file_path}" has no extension.'
+    
+    match extension:
+        case ".txt" | ".py" | ".json" | ".R":
+            folder = "scripts"
+        
+        case ".ipynb":
+            folder = "notebooks"
+            updated_content, len_updated_content = updateFile.update_ipynb(original_content, json.loads(changes))
+            
+    path = parent / folder / p
+    
+    with path.open("w") as file:
+        len_file_write = file.write(updated_content)
+    
+    if len_updated_content == len_file_write:
+        return f"Check file at {file_path}!"
+    
+    
+def delete_file(file_path: str):
+    pass
 
 
 # OpenAI format for tools
@@ -170,13 +209,9 @@ tools_openai =  [
                 "type": "string",
                 "description": "a key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in dictionary format"
             },
-            "read_file_path": {
+            "file_path": {
                 "type": "string",
                 "description": "file path to read file contents from"
-            },
-            "save_file_path": {
-                "type": "string",
-                "description": "optional file path to save changes to, defaulted to overwriting changes on the same file path as read_file_path"
             },
             "required": ["changes", "read_file_path"],
         }
