@@ -12,9 +12,9 @@ class ReadFiles:
         _path = str(self.p)
         
         if _cwd in _path:
-            _path = _path.replace(_cwd, "..")
+            _path = _path.replace(_cwd, "")
             
-        self.content = {"file": _path}
+        self.content = {"file": self.p.name}
 
 
     # TODO: refactor for readability and reduce code redundancy
@@ -103,13 +103,27 @@ class ReadFiles:
         return json.dumps(self.content, indent=4)
     
 
-    def read_script(self):
-        pass
+    def read_script(self, for_update: bool):
+        """
+        Reads programming scripts and returns the following JSON format:
+        
+        ```
+        {
+            "file": "file_path",
+            "content": []
+        }
+        ```
+        """
+        
+        with self.p.open() as script_file:
+            content = script_file.readlines()
+        
+        if for_update:
+            return content
+        
+        return json.dumps(content)
 
-    def read_pdf(self):
-        pass
-
-    def read_word(self):
+    def read_documents(self):
         pass
     
     def read_image(self):
@@ -195,12 +209,111 @@ class UpdateFiles:
         
         return updated_content, len_updated_content
 
-    def update_script(self):
-        pass
+    def update_script(self, original_content: list, operations: list):
+        """
+        Updates programming scripts with the following format:
+        ```
+        [
+            {
+                "operation": "insert_line",      # must increment line offset by one line for every line inserted
+                "lines": {
+                    0: ["code content", "\\n" "code content", "\\n",  "code content"],      # list out sequential lines of code to be inserted from one place
+                    1: "code content",
+                    2: ["code content", "\\n", "code content"]
+                }
+            },
+            {
+                "operation": "delete_line",     # must decrease line offset by one line for every line deleted
+                "lines": [0, 1, 2]
+            },
+            {
+                "operation": "edit_line",       # must reference existing line number at the time when the file was read originally, target line must be compensated by line offset after above operations
+                "lines": {
+                    0: "code content\\n",
+                    4: "code content\\n",
+                }
+            }
+        ]
+        ```
+        """
 
-    def update_pdf(self):
-        pass
+        def check_operations_availability(operations: list):
+            insert_operation = delete_operation = edit_operation = False
+            
+            for operation in operations:
+                if operation["operation"] == "insert_line":
+                    insert_operation = True
+                    
+                elif operation["operation"] == "delete_line":
+                    delete_operation = True
+                    
+                elif operation["operation"] == "edit_line":
+                    edit_operation = True
+                    
+            return insert_operation, delete_operation, edit_operation
 
-    def update_word(self):
-        pass
+        lines_offset = 0
+        len_original = len(original_content)
+        
+        if len(operations) > 3:
+            return "Error: max three operations are allowed! If there are duplicate operations, combine them into one!"
+
+        insert_operation, delete_operation, edit_operation = check_operations_availability(operations)
+
+        for operation in operations:
+            index = operations.index(operation)
+            
+            if operation["operation"] == "insert_line":
+                if index != 0:
+                    return "Error: insert operation must be first in line!"
+                
+                for line, code in operation["lines"].items():
+                    target_line = int(line) + lines_offset
+                    
+                    if 0 <= target_line < len_original:
+                        if isinstance(code, list):
+                            original_content[:target_line] += code
+                            lines_offset += len(code)
+                            
+                        else:
+                            original_content.insert(target_line, code)
+                            lines_offset += 1
+                            
+                    else:
+                        if isinstance(code, list):
+                            original_content += code
+                        
+                        else:
+                            original_content.append(code)
+            
+            elif operation["operation"] == "delete_line":
+                if insert_operation and index != 1:
+                    return "Error: delete operation must be second in line!"
+                
+                elif edit_operation and index != 0:
+                    return "Error: delete operation must be first in line!"
+
+                print(f"[file_operations.py] Lines offset: {lines_offset}")
+                print(f"[file_operations.py] Index of last line: {len(original_content) - 1}\n")
+                
+                operation["lines"] = [int(line) + lines_offset for line in operation["lines"]]
+                print(operation["lines"])
+                
+                for line in operation["lines"]:
+                    original_content.pop(line)
+                    lines_offset -= 1
+            
+            elif operation["operation"] == "edit_line":
+                if insert_operation and delete_operation and index != 2:
+                    return "Error: edit operation must be third in line!"
+                
+                elif (insert_operation or delete_operation) and index != 1:
+                    return "Error: edit operation must be second in line!"
+                
+                for line, code_line in operation["lines"].items():
+                    original_content[int(line) + lines_offset] = code_line
+        
+        updated_content = "".join(original_content)
+        
+        return updated_content, len(updated_content)
     

@@ -5,6 +5,20 @@ from pathlib import Path
 from file_operations import ReadFiles, UpdateFiles
 
 
+def folder_assignment(file_path: str):
+    parent = Path().cwd().parent
+    p = Path(file_path)
+    
+    match p.suffix:
+        case ".ipynb":
+            folder = "notebooks"
+            
+        case _:
+            folder = "scripts"
+    
+    return parent / folder / p.name
+
+
 def create_file(content: str, file_path: str | None) -> str:
     """
     Injects code into a script and saves into a custom file path, current working directory is defaulted with the extension ".txt". 
@@ -28,11 +42,11 @@ def create_file(content: str, file_path: str | None) -> str:
         p = Path(file_path)
         
         match p.suffix:
-            case ".txt" | ".py" | ".json" | ".R":
-                folder = "scripts"
-                
             case ".ipynb":
                 folder = "notebooks"
+                
+            case _:
+                folder = "scripts"
         
         target_path = parent / folder / p.name
         
@@ -57,7 +71,8 @@ def read_file(file_path: str, for_update: bool = False) -> str:
     ---
     
     **IMPORTANT FILE PATH NOTICE:**\n
-    NEVER guess where the file might be located, return to user with `FileNotFoundError` message and ask for its correct path\n
+    Assume that the file path given is in the current working directory.\n
+    NEVER guess where the file might be located when you are returned `FileNotFoundError` message. Ask the user for its correct path.\n
     """
     
     parent = Path().cwd().parent
@@ -68,28 +83,36 @@ def read_file(file_path: str, for_update: bool = False) -> str:
         return f'Error: file "{file_path}" has no extension.'
     
     match extension:
-        case ".txt" | ".py" | ".json" | ".R":
-            folder = "scripts"
-        
         case ".ipynb":
             folder = "notebooks"
+            
+        case _:
+            folder = "scripts"
     
     path = parent / folder / p
+    
     readFiles = ReadFiles(file_path=path)
     
     if path.exists():
         match folder:
             case "notebooks":
+                # `for_update`: False for gpt format (default), True for raw list
                 return readFiles.read_ipynb(for_update=for_update)
+            
+            case "scripts":
+                return readFiles.read_script(for_update=for_update)
             
     else:
         return f'Error: file in path "{file_path}" not found.'
 
 
-def update_file(changes: str, file_path: str) -> str:
+def update_file(file_path: str, changes: list,) -> str:
     """
     Edits file contents\n
-    Call this function when user asks to edit a file\n
+    Call this function when user asks to udpate or edit a file\n
+    Imperative that you read the target file content first before suggesting an edit!\n
+    NEVER run this function until the user verifies your formatting\n
+    Show the user your appropriate JSON formatting based on tpye of file you are editing first\n
     
     Args:
         changes: a series of key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in JSON format (refer to **IMPORTANT FORMATTING NOTICE** documentation below)
@@ -97,9 +120,11 @@ def update_file(changes: str, file_path: str) -> str:
     
     ---
     
-    ### IMPORTANT FORMATTING NOTICE:\n
+    ### Important Formatting Notice:\n
         
-    If the file path is an `.ipynb` notebook, `changes` parameter should be in following JSON format:
+    `changes` parameter should be in following JSON format if the file is a/an:
+    
+    - `.ipynb` notebook:
     ```
     {
         cell_number: {
@@ -129,88 +154,35 @@ def update_file(changes: str, file_path: str) -> str:
     }
     ```
     
-    **IMPORTANT CELL NUMBER AND LINE NUMBER NOTICE:**\n
-    
-    Provide the cell number and line number you wish to add and edit at the time when the file is read. An internal counter is being implemented to track cell count and positioning differences.\n
-    
-    For example, suppose the JSON structure for an IPYNB notebook is as such:
-    
+    - `.py`, `.txt`, `.json` or similar scripting extensions:
     ```
-    {'cells': [{'cell_type': 'code',
-                'execution_count': None,
-                'id': '8ea3d3f2',
-                'metadata': {},
-                'outputs': [],
-                'source': ['print("hello there")']},
-            {'cell_type': 'code',
-                'execution_count': None,
-                'id': '09c81d49',
-                'metadata': {},
-                'outputs': [],
-                'source': ['"hello"']},
-            {'cell_type': 'code',
-                'execution_count': None,
-                'id': '30b151d0',
-                'metadata': {},
-                'outputs': [],
-                'source': ['import pandas as pd\n',
-                        'df = pd.DataFrame({"Column 1": range(1, 11), "Column '
-                        '2": range(11, 21)})\n',
-                        'display(df)']}],
-    'metadata': {'kernelspec': {'display_name': 'llm',
-                                'language': 'python',
-                                'name': 'python3'},
-                'language_info': {'name': 'python', 'version': '3.13.18'}},
-    'nbformat': 4,
-    'nbformat_minor': 5}
-    ```
+    # all lines must reference their respective positions at the time of reading file contents
+    # order of operations must strictly be in this order: `insert_line`, `delete_line`, `edit_line`
+    # NEVER use `edit_line` to edit one line to insert multiple lines of code!!! Use `insert_line` instead
+    # always insert the newline character at the end of line you are editing
     
-    and the prompt is as such:
-    
-    ```
-    update "*.ipynb" in the following edits: 1. create a cell at the top of the file to display a markdown title "this is a test". 2. insert another code cell at cell 1 to print "hello there". 3. edit the current second cell to display a dataframe with 2 columns and 10 records. 4. delete the last cell.
-    ```
-    
-    the `changes` parameter should look like this:\n
-    
-    ```
-    {
-        0: {
-            "operation": "insert_cell",
-            "content": {
-                "cell_type": "markdown",
-                "source": ["# This is a test"]
+    [
+        {
+            "operation": "insert_line", 
+            "lines": {
+                0: ["code content", "\\n" "code content", "\\n",  "code content"],    # list out sequential lines of code to be inserted from one place
+                1: "code content",    # prepare only one line of code for lines requiring only one line of code to be inserted
+                2: ["code content", "\\n", "code content"]
             }
         },
-        1: {
-            "operation": "insert_cell",
-            "content": {
-                "cell_type": "code",
-                "source": ["print(\"hello there\")"],
-            }
+        {
+            "operation": "delete_line",  
+            "lines": [0, 1, 2]    # prepare line(s) of code to remove in list
         },
-        1: {    # at the time of reading the file, this current cell BEFORE INSERTIONS above is the second cell, therefore refer to this cell number, NOT the cell number after insertion operations above
-            "operation": "edit_cell",
-            "content": {
-                "cell_type": "code",
-                "source": {
-                    0: "import pandas as pd", ...
-                }
+        {
+            "operation": "edit_line",    # must reference line position at the time of file read, NOT after above operations
+            "lines": {
+                0: "code content",
+                4: "code content",
             }
-        },
-        2: {    # at the time of reading the file, this current cell BEFORE INSERTIONS above is the last cell, therefore refer to this cell number, NOT the cell number after insertion operations above
-            "operation": "delete_cell"
         }
-    }
-    ```\n
-    
-    For every insertion, an internal counter is already keeping track of the cell number by adding how many cells were inserted. Therefore, keep the cell number in the `changes` parameter referencing the cell number at the time of reading the file. DO NOT ASSUME what cell numbers would be after adding a cell.\n
-    Note that **you are referencing 0-based indexing** while manipulating contents, while **user prompts are using 1-based indexing** for easy reference. Note this difference.
-    
-    **IMPORTANT REMOVING LINES NOTICE:**\n
-    
-    Include lines where they need to be removed from the lines of code with:
-        - `.ipynb` notebook: ```"source": {line_num: "editing this line", line_num: "", line_num: ""}      # two lines removed from code, IMPORTANT to include to remove unwanted lines of code in a cell```
+    ]
+    ```
     """
     
     # To-do for this funciton:
@@ -228,12 +200,16 @@ def update_file(changes: str, file_path: str) -> str:
         return f'Error: file "{file_path}" has no extension.'
     
     match extension:
-        case ".txt" | ".py" | ".json" | ".R":
-            folder = "scripts"
-        
         case ".ipynb":
             folder = "notebooks"
             updated_content, len_updated_content = updateFile.update_ipynb(original_content, changes)
+        
+        case ".docx" | ".pdf":
+            pass
+        
+        case _:
+            folder = "scripts"
+            updated_content, len_updated_content = updateFile.update_script(original_content, changes)
             
     path = parent / folder / p
     
@@ -241,7 +217,7 @@ def update_file(changes: str, file_path: str) -> str:
         len_file_write = file.write(updated_content)
     
     if len_updated_content == len_file_write:
-        return f"File overwrite successful at `{file_path}`!"
+        return f"File overwrite successful at `{file_path}`! [IMPORTANT] Read the file again to ensure all edits are correct."
     
     
 def delete_file(file_path: str):
@@ -289,13 +265,13 @@ tools_openai =  [
         "name": "update_file",
         "description": update_file.__doc__,
         "parameters": {
-            "changes": {
-                "type": "string",
-                "description": "a key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in dictionary format"
-            },
             "file_path": {
                 "type": "string",
                 "description": "file path to read file contents from"
+            },
+            "changes": {
+                "type": "string",
+                "description": "a key-value pair containing the keys as line numbers in integers and values as their line of contents in string, MUST be in dictionary format"
             },
             "required": ["changes", "file_path"],
         }
@@ -303,3 +279,5 @@ tools_openai =  [
 ]
 
 # edit two_variable_histograms.ipynb file's last cell to change its contents to printing hello world
+
+# update hello.py to include object detection capabilities with rf-detr model
