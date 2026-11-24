@@ -215,6 +215,13 @@ class UpdateFiles:
         ```
         [
             {
+                "operation": "edit_line",       # must reference existing line number at the time when the file was read originally, target line must be compensated by line offset after above operations
+                "lines": {
+                    0: "code content\\n",
+                    4: "code content\\n",
+                }
+            },
+            {
                 "operation": "insert_line",      # must increment line offset by one line for every line inserted
                 "lines": {
                     0: ["code content", "\\n" "code content", "\\n",  "code content"],      # list out sequential lines of code to be inserted from one place
@@ -225,14 +232,7 @@ class UpdateFiles:
             {
                 "operation": "delete_line",     # must decrease line offset by one line for every line deleted
                 "lines": [0, 1, 2]
-            },
-            {
-                "operation": "edit_line",       # must reference existing line number at the time when the file was read originally, target line must be compensated by line offset after above operations
-                "lines": {
-                    0: "code content\\n",
-                    4: "code content\\n",
-                }
-            }
+            }   
         ]
         ```
         """
@@ -277,7 +277,6 @@ class UpdateFiles:
             # checking operation ordering
             if edit_operation:
                 if operation_positions["edit_line"]["position"] != 0:
-                    # print("Stopped at editing operation checking.")
                     operation_positions["edit_line"]["message"] = "Edit operation not in first position!"
                     operation_positions["edit_line"]["success_state"] = 0
                 
@@ -286,9 +285,6 @@ class UpdateFiles:
                     operation_positions["edit_line"]["success_state"] = 1
                 
             if insert_operation:
-                # insert and delete only, so insert is first position
-                # print((not edit_operation and delete_operation))
-                # print(operation_positions["insert_line"])
                 if (not edit_operation and delete_operation) and operation_positions["insert_line"]["position"] != 0:
                     operation_positions["insert_line"]["message"] = "Insert operation not in first position!"
                     operation_positions["insert_line"]["success_state"] = 0
