@@ -1,8 +1,10 @@
 from openai import OpenAI
 from tools import *
 from openai.types.responses import ResponseTextDeltaEvent, ResponseFunctionToolCall, ResponseOutputMessage, ResponseCompletedEvent, ResponseReasoningItem
+from openai import BadRequestError
 import json
-# import pprint
+import readline
+import pprint
 
 client = OpenAI()
 
@@ -55,7 +57,6 @@ def chat(prompt):
                         elif item.name == "update_file":
                             changes = arguments["changes"]
                             file_path = arguments["file_path"]
-                                
                             status = update_file(changes=changes, file_path=file_path)
                         
                         messages.append(
@@ -77,16 +78,13 @@ def chat(prompt):
         if not actions:
             break
                 
-        # pprint.pprint(messages, sort_dicts=False)
-                
     print(end="\n\n", flush=False)
 
 try:
     while True:
-        # pprint.pprint(messages, sort_dicts=False)
-        # print()
         
-        prompt = input("\nEnter prompt: ")
+        print(f"\nTokens used: {client.responses.input_tokens.count(model='gpt-6-luna', input=messages).input_tokens}")
+        prompt = input("Enter prompt: ")
         
         if prompt == "":
             print("\n[WARNING] Enter prompt! No prompt to be empty\n")
@@ -107,4 +105,7 @@ except KeyboardInterrupt:
     import subprocess
     subprocess.run(["clear"])
     
-# create an ipynb notebook to display histogram of two variables from a dataset containing 2 columns and 10 records.
+except BadRequestError as e:
+    print(e)
+    pprint.pprint(messages, sort_dicts=False)
+    
