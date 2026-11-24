@@ -237,83 +237,165 @@ class UpdateFiles:
         ```
         """
 
-        def check_operations_availability(operations: list):
-            insert_operation = delete_operation = edit_operation = False
+        def check_operations_availability_and_positions(operations: list):
+            """
+            operation_positions = {
+                "edit_line": {
+                    "position": 0,
+                    "success_state": 1
+                    "message": "Correct position"
+                },
+                "insert_line": {
+                    "position": 1,
+                    "success_state": 1,
+                    "messages": "Correct position"
+                },
+                "delete_line": {
+                    "position": 0,
+                    "success_state": 1,
+                    "message": "Correct position"
+                }
+            }
+            """
             
-            for operation in operations:
-                if operation["operation"] == "insert_line":
+            insert_operation = delete_operation = edit_operation = False
+            operation_positions = {}
+            
+            for position in range(len(operations)):
+                if operations[position]["operation"] == "insert_line":
                     insert_operation = True
+                    operation_positions["insert_line"] = {"position": position, "success_state": None, "message": None}
                     
-                elif operation["operation"] == "delete_line":
+                elif operations[position]["operation"] == "delete_line":
                     delete_operation = True
+                    operation_positions["delete_line"] = {"position": position, "success_state": None, "message": None}
                     
-                elif operation["operation"] == "edit_line":
+                elif operations[position]["operation"] == "edit_line":
                     edit_operation = True
-                    
-            return insert_operation, delete_operation, edit_operation
+                    operation_positions["edit_line"] = {"position": position, "success_state": None, "message": None}
+            
+            # checking operation ordering
+            if edit_operation:
+                if operation_positions["edit_line"]["position"] != 0:
+                    # print("Stopped at editing operation checking.")
+                    operation_positions["edit_line"]["message"] = "Edit operation not in first position!"
+                    operation_positions["edit_line"]["success_state"] = 0
+                
+                else:
+                    operation_positions["edit_line"]["message"] = "Edit position is in the correct position"
+                    operation_positions["edit_line"]["success_state"] = 1
+                
+            if insert_operation:
+                # insert and delete only, so insert is first position
+                # print((not edit_operation and delete_operation))
+                # print(operation_positions["insert_line"])
+                if (not edit_operation and delete_operation) and operation_positions["insert_line"]["position"] != 0:
+                    operation_positions["insert_line"]["message"] = "Insert operation not in first position!"
+                    operation_positions["insert_line"]["success_state"] = 0
+                
+                # edit exists, so insert must be second
+                elif edit_operation and operation_positions["insert_line"]["position"] != 1:
+                    operation_positions["insert_line"]["message"] = "Insert operation not in second position!"
+                    operation_positions["insert_line"]["success_state"] = 0
+                
+                else:
+                    operation_positions["insert_line"]["message"] = "Insert position is in the correct position"
+                    operation_positions["insert_line"]["success_state"] = 1
+                
+            if delete_operation:
+                # insert and delete only, so delete must be second position
+                # edit and delete only
+                if ((not edit_operation and insert_operation) or (edit_operation and not insert_operation)) and operation_positions["delete_line"]["position"] != 1:
+                    operation_positions["delete_line"]["message"] = "Delete operation not in second position!"
+                    operation_positions["delete_line"]["success_state"] = 0
 
-        lines_offset = 0
+                elif (edit_operation and insert_operation) and operation_positions["delete_line"]["position"] != 2:
+                    operation_positions["delete_line"]["message"] = "Delete operation not in third position!"
+                    operation_positions["delete_line"]["success_state"] = 0
+                else:
+                    operation_positions["delete_line"]["message"] = "Delete position is in the correct position"
+                    operation_positions["delete_line"]["success_state"] = 1
+            
+            return operation_positions, insert_operation, delete_operation, edit_operation
+
+        lines_inserted = 0
         len_original = len(original_content)
         
         if len(operations) > 3:
             return "Error: max three operations are allowed! If there are duplicate operations, combine them into one!"
 
-        insert_operation, delete_operation, edit_operation = check_operations_availability(operations)
+        operations_availability_and_positions, _, delete_operation, _ = check_operations_availability_and_positions(operations)
+        
+        success_states = []
+        ops_messages = []
+
+        for _, metadata in operations_availability_and_positions.items():
+            success_states.append(metadata["success_state"])
+            ops_messages.append(metadata["message"])
+            
+        if not all(success_states):
+            # exit function and return JSON for chat
+            error = 1
+            return error, json.dumps(ops_messages), 0
+        
+        else:
+            del success_states
+            del ops_messages
+            error = 0
+        
+        # When operations positions are correct
 
         for operation in operations:
-            index = operations.index(operation)
             
-            if operation["operation"] == "insert_line":
-                if index != 0:
-                    return "Error: insert operation must be first in line!"
+            if operation["operation"] == "edit_line":
+                for line_num, line_code in operation["lines"].items():
+                    original_content[int(line_num)] = line_code
+            
+            elif operation["operation"] == "insert_line":
+                lines_inserted = 0
                 
-                for line, code in operation["lines"].items():
-                    target_line = int(line) + lines_offset
+                for insert_line_num, line_code in operation["lines"].items():
+                    target_line = int(insert_line_num) + lines_inserted
                     
                     if 0 <= target_line < len_original:
-                        if isinstance(code, list):
-                            original_content[:target_line] += code
-                            lines_offset += len(code)
+                        if isinstance(line_code, list):
+                            # insert new lines
+                            original_content[:target_line] += line_code
+                            lines_inserted += len(line_code)
+                            added_lines = len(line_code)
                             
                         else:
-                            original_content.insert(target_line, code)
-                            lines_offset += 1
+                            original_content.insert(target_line, line_code)
+                            lines_inserted += 1
+                            added_lines = 1
+                            
+                        # compensate for delete lines after insertion at different indexes
+                        if delete_operation:
+                            
+                            # delete operation is always last
+                            for position in range(len(operations[-1]["lines"])):
+                                num = int(operations[-1]["lines"][position])
+                                
+                                if num > int(insert_line_num):
+                                    # print(f"{num} is more than {int(insert_line_num)}")
+                                    operations[-1]["lines"][position] = num + added_lines
                             
                     else:
-                        if isinstance(code, list):
-                            original_content += code
+                        if isinstance(line_code, list):
+                            original_content += line_code
                         
                         else:
-                            original_content.append(code)
-            
+                            original_content.append(line_code)
+                        
             elif operation["operation"] == "delete_line":
-                if insert_operation and index != 1:
-                    return "Error: delete operation must be second in line!"
-                
-                elif edit_operation and index != 0:
-                    return "Error: delete operation must be first in line!"
-
-                print(f"[file_operations.py] Lines offset: {lines_offset}")
-                print(f"[file_operations.py] Index of last line: {len(original_content) - 1}\n")
-                
-                operation["lines"] = [int(line) + lines_offset for line in operation["lines"]]
-                print(operation["lines"])
+                # this assumes the delete operation is compensated with inserted lines
+                lines_deleted = 0
                 
                 for line in operation["lines"]:
-                    original_content.pop(line)
-                    lines_offset -= 1
+                    original_content.pop(int(line) - lines_deleted)
+                    lines_deleted += 1
             
-            elif operation["operation"] == "edit_line":
-                if insert_operation and delete_operation and index != 2:
-                    return "Error: edit operation must be third in line!"
-                
-                elif (insert_operation or delete_operation) and index != 1:
-                    return "Error: edit operation must be second in line!"
-                
-                for line, code_line in operation["lines"].items():
-                    original_content[int(line) + lines_offset] = code_line
-        
         updated_content = "".join(original_content)
         
-        return updated_content, len(updated_content)
+        return error, updated_content, len(updated_content)
     

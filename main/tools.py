@@ -157,11 +157,18 @@ def update_file(file_path: str, changes: list,) -> str:
     - `.py`, `.txt`, `.json` or similar scripting extensions:
     ```
     # all lines must reference their respective positions at the time of reading file contents
-    # order of operations must strictly be in this order: `insert_line`, `delete_line`, `edit_line`
+    # order of operations must strictly be in this order: `edit_line`, `insert_line`, `delete_line`
     # NEVER use `edit_line` to edit one line to insert multiple lines of code!!! Use `insert_line` instead
     # always insert the newline character at the end of line you are editing
     
     [
+        {
+            "operation": "edit_line",    # must reference line position at the time of file read, NOT after above operations
+            "lines": {
+                0: "code content",
+                4: "code content",
+            }
+        },
         {
             "operation": "insert_line", 
             "lines": {
@@ -174,13 +181,6 @@ def update_file(file_path: str, changes: list,) -> str:
             "operation": "delete_line",  
             "lines": [0, 1, 2]    # prepare line(s) of code to remove in list
         },
-        {
-            "operation": "edit_line",    # must reference line position at the time of file read, NOT after above operations
-            "lines": {
-                0: "code content",
-                4: "code content",
-            }
-        }
     ]
     ```
     """
@@ -204,13 +204,13 @@ def update_file(file_path: str, changes: list,) -> str:
             folder = "notebooks"
             updated_content, len_updated_content = updateFile.update_ipynb(original_content, changes)
         
-        case ".docx" | ".pdf":
-            pass
-        
         case _:
             folder = "scripts"
-            updated_content, len_updated_content = updateFile.update_script(original_content, changes)
+            error, updated_content, len_updated_content = updateFile.update_script(original_content, changes)
             
+            if error:
+                return updated_content
+                
     path = parent / folder / p
     
     with path.open("w") as file:
