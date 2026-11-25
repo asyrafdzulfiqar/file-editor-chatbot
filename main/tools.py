@@ -106,6 +106,8 @@ def read_file(file_path: str, for_update: bool = False) -> str:
         return f'Error: file in path "{file_path}" not found.'
 
 
+# TODO: create an environment that the bot seees updated content before overwriting the file to assure itself of the JSON formatting
+# TODO: create a changelog that stores current version and all 
 def update_file(file_path: str, changes: list,) -> str:
     """
     Edits file contents\n
@@ -159,6 +161,7 @@ def update_file(file_path: str, changes: list,) -> str:
     # all lines must reference their respective positions at the time of reading file contents
     # order of operations must strictly be in this order: `edit_line`, `insert_line`, `delete_line`
     # NEVER use `edit_line` to edit one line to insert multiple lines of code!!! Use `insert_line` instead
+    # it is better to edit lines first before inserting. edit the current lines first, then insert new content at the last edited line if insertion is part of the edited line
     # always insert the newline character at the end of line you are editing
     
     [
